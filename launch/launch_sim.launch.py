@@ -1,47 +1,35 @@
-import os
-
-from ament_index_python.packages import get_package_share_directory
-
-
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-
+from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
-
-
+from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
+    pkg_my_bot = FindPackageShare('my_bot')
+    pkg_ros_gz_sim = FindPackageShare('ros_gz_sim')
+    world_sdf = PathJoinSubstitution([pkg_my_bot, 'worlds', 'empty.sdf'])
 
-
-    # Include the robot_state_publisher launch file, provided by our own package. Force sim time to be enabled
-    # !!! MAKE SURE YOU SET THE PACKAGE NAME CORRECTLY !!!
-
-    package_name='my_bot' #<--- CHANGE ME
-
-    rsp = IncludeLaunchDescription(
-                PythonLaunchDescriptionSource([os.path.join(
-                    get_package_share_directory(package_name),'launch','rsp.launch.py'
-                )]), launch_arguments={'use_sim_time': 'true'}.items()
-    )
-
-    # Include the Gazebo launch file, provided by the gazebo_ros package
-    gazebo = IncludeLaunchDescription(
-                PythonLaunchDescriptionSource([os.path.join(
-                    get_package_share_directory('gazebo_ros'), 'launch', 'gazebo.launch.py')]),
-             )
-
-    # Run the spawner node from the gazebo_ros package. The entity name doesn't really matter if you only have a single robot.
-    spawn_entity = Node(package='gazebo_ros', executable='spawn_entity.py',
-                        arguments=['-topic', 'robot_description',
-                                   '-entity', 'my_bot'],
-                        output='screen')
-
-
-
-    # Launch them all!
     return LaunchDescription([
-        rsp,
-        gazebo,
-        spawn_entity,
+        # Robot State Publisher
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([pkg_my_bot, 'launch', 'rsp.launch.py'])
+            ),
+            launch_arguments={'use_sim_time': 'true'}.items(),
+        ),
+        # Gazebo Harmonic (headless)
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py'])
+            ),
+            launch_arguments={'gz_args': f'-r -s {world_sdf}'}.items(),
+        ),
+        # Spawn Robot
+        Node(
+            package='ros_gz_sim',
+            executable='create',
+            arguments=['-topic', 'robot_description', '-name', 'bot_name'],
+            output='screen',
+        ),
     ])
